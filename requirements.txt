@@ -1,0 +1,12 @@
+torch
+torchvision
+kornia
+plotly
+pandas
+kaleido
+nbconvert
+nbformat
+ipykernel
+tqdm
+einops
+matplotlib
