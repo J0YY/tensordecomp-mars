@@ -2,7 +2,7 @@
 
 This is my extended solution for the MARS V applicant task on decomposing MNIST bilinear weights into human concepts. I treated the assignment as a small research loop: reproduce the provided decomposition, define faithfulness/readability metrics, try several priors, and keep the strongest visual and quantitative results.
 
-The short version: plain tensor reconstruction gives high fidelity but noisy components. Adding human-facing priors creates a clear Pareto frontier. The best visual result has very clean, one-class heads and localized components; the best balanced result uses a stroke-template dictionary and keeps one-hot heads while recovering substantially more tensor fidelity.
+The short version: plain tensor reconstruction gives high fidelity but noisy components. Adding human-facing priors creates a clear Pareto frontier. The best visual result has very clean, one-class heads and localized components; the best balanced result combines stroke templates, learnable localized masks, and a small residual dictionary.
 
 ## How I Thought About The Task
 
@@ -51,6 +51,7 @@ the same object.
 - `scripts/search_decompositions.py` - first broad search over CP/symmetric/evidence-split variants
 - `scripts/search_visual_priors.py` - stronger visual-prior search with masks, hard heads, and distillation
 - `scripts/search_stroke_templates.py` - human stroke-template dictionary experiment
+- `scripts/search_stroke_mask_residual.py` - combined stroke-template, learnable-mask, residual experiment
 - `figures/` - exported figures and CSV metric tables
 
 I also added a minimal local `image/` package because the helper source imported by the notebooks was not present in the provided directory.
@@ -124,7 +125,17 @@ This beats the prompt example on measured head clarity and locality: every displ
 
 ## Best Balanced Result
 
-The best balance came from the stroke-template dictionary, `stroke_cp_top1_resid03`. Here I initialized components from human stroke templates, then allowed a small smooth residual and learned amplitudes/class heads.
+The best balance came from `combo_cp_top1_res8`, which combines:
+
+- human stroke-template initialization
+- learnable localized masks
+- hard top-1 class heads for the displayed components
+- a small residual CP branch for tensor fidelity
+
+The residual branch is deliberately not shown in the main component grid. It is
+there to absorb leftover tensor structure while keeping the reported dictionary
+human-readable. This gives a cleaner separation between "interpretable
+dictionary" and "fidelity residual."
 
 The template bank includes:
 
@@ -135,20 +146,24 @@ The template bank includes:
 - loops
 - endpoint/corner blobs
 
-![Stroke-template decomposition](figures/stroke_templates/best_stroke_template_denoised.png)
+![Stroke-template mask residual decomposition](figures/stroke_mask_residual/best_stroke_mask_residual_denoised.png)
 
 Metrics:
 
 | Metric | Value |
 |---|---:|
-| tensor cosine | `0.8424` |
-| decomposed test accuracy | `96.3%` |
-| pattern gini | `0.4704` |
-| 7x7 locality | `0.2931` |
+| total tensor cosine | `0.8757` |
+| displayed dictionary cosine | `0.6668` |
+| decomposed test accuracy | `96.8%` |
+| pattern gini | `0.5005` |
+| 7x7 locality | `0.3240` |
 | class selectivity | `1.0000` |
 | top-1 head mass | `1.0000` |
 
-This is the result I would emphasize as the most promising research direction. It preserves one-hot class heads and good accuracy while recovering much more tensor fidelity than the extreme mask-only visual result. It also directly tests the hypothesis that the model can be described in terms of reusable human stroke primitives.
+This is the result I would emphasize as the most promising research direction.
+It keeps one-hot heads and readable stroke-like components, improves over the
+plain stroke-template dictionary on fidelity and locality, and avoids pretending
+that every last bit of tensor mass is human-readable.
 
 ## Highest-Fidelity Result
 
@@ -216,6 +231,15 @@ This produced the cleanest visual result, `mask034_cp_top1_distill`, with one-ho
 
 Finally, I changed the dictionary family instead of only increasing regularization. Components were initialized from explicit stroke templates and given small smooth residuals. This produced the best balanced result: `stroke_cp_top1_resid03`.
 
+### 6. Stroke Templates + Learnable Masks + Residual
+
+The final experiment combined the two strongest ideas. I started from stroke
+templates, multiplied them by learnable Gaussian masks, forced one-class heads,
+and added a small unrestricted residual dictionary. This produced
+`combo_cp_top1_res8`, which improved the balanced result to `0.8757` total
+tensor cosine and `96.8%` accuracy while keeping the displayed components
+one-hot.
+
 ## Summary Table
 
 | Approach | Tensor cosine | Accuracy | Why it matters | Weakness |
@@ -224,11 +248,12 @@ Finally, I changed the dictionary family instead of only increasing regularizati
 | Evidence split sparse/smooth | `0.8770` | `95.5%` | better shared decomposition | still visually noisy |
 | CP soft symmetry rank-64 | `0.9497` | `97.1%` | highest fidelity | poor readability |
 | Extreme localized top-1 masks | `0.6546` | `95.2%` | cleanest visual heads/locality | lower tensor cosine |
-| Stroke-template dictionary | `0.8424` | `96.3%` | best interpretability/fidelity compromise | less local than tight masks |
+| Stroke-template dictionary | `0.8424` | `96.3%` | one-hot heads plus human stroke prior | less local than tight masks |
+| Stroke templates + masks + residual | `0.8757` | `96.8%` | best balanced result | residual branch is less interpretable |
 
 ## Interpretation
 
-The main finding is a Pareto frontier. If we optimize only tensor reconstruction, we get high-fidelity but visually superposed features. If we force locality and one-class heads, we get much clearer components while preserving surprisingly good classification accuracy. The stroke-template dictionary is the most interesting middle ground because it encodes an explicit human prior without collapsing accuracy.
+The main finding is a Pareto frontier. If we optimize only tensor reconstruction, we get high-fidelity but visually superposed features. If we force locality and one-class heads, we get much clearer components while preserving surprisingly good classification accuracy. The best compromise was to separate the problem into an interpretable dictionary plus a small residual. That is a useful pattern for future work: report the human-readable part honestly, and measure how much residual structure remains.
 
 This is the direction I would keep pursuing with a MARS mentor or at Goodfire: use weight-level decompositions, but give the dictionary enough structure that the discovered components can become actual concepts rather than arbitrary low-rank factors.
 
@@ -260,18 +285,23 @@ PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_visual_priors.py \
 
 PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_stroke_templates.py \
   --epochs 10 --steps 360 --rank 72
+
+PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_stroke_mask_residual.py \
+  --epochs 10 --steps 320 --rank 64
 ```
 
 The CSV outputs in `figures/` contain the full metric tables.
 
 ## Next Steps
 
-The next best experiment is to combine the two strongest ideas:
+The next best experiment is to make the residual branch itself more interpretable:
 
-1. Start from stroke templates.
-2. Add learnable localized masks instead of fixed masks.
-3. Keep hard top-1/top-2 class heads.
-4. Add a small high-fidelity residual dictionary.
-5. Match components across random seeds and only report recurring concepts.
+1. Match the stroke-mask components across random seeds and only report recurring
+   concepts.
+2. Decompose the residual branch with the same visual-prior method.
+3. Add activation galleries for the top stroke-mask components.
+4. Try a two-stage objective: first fit high-fidelity, then freeze residual and
+   simplify the displayed dictionary.
 
-That should improve semantic stroke quality without giving up the class-head clarity that made the visual-prior runs compelling.
+That should improve semantic stroke quality without giving up the class-head
+clarity that made the visual-prior runs compelling.

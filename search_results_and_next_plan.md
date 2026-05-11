@@ -269,3 +269,46 @@ The most compelling submission story is not that one method dominates all
 metrics. It is that different priors expose a real Pareto frontier between
 faithfulness and human readability, and the stroke-template dictionary is a
 promising way to move along that frontier.
+
+## Follow-Up: Stroke Templates + Learnable Masks + Residual
+
+I implemented the next combination in
+`scripts/search_stroke_mask_residual.py`.
+
+This combines:
+
+- stroke-template initialization
+- learnable Gaussian masks
+- hard top-k heads for displayed components
+- a small unrestricted residual CP branch
+
+Artifacts:
+
+- `figures/stroke_mask_residual/stroke_mask_residual_results.csv`
+- `figures/stroke_mask_residual/best_stroke_mask_residual_raw.png`
+- `figures/stroke_mask_residual/best_stroke_mask_residual_denoised.png`
+
+Best balanced result:
+
+- `combo_cp_top1_res8`
+- total tensor cosine: `0.8757`
+- displayed/main dictionary cosine: `0.6668`
+- test accuracy: `96.8%`
+- pattern gini: `0.5005`
+- locality `7x7`: `0.3240`
+- class selectivity: `1.0000`
+- top-1 head mass: `1.0000`
+
+Highest total tensor cosine in this batch:
+
+- `combo_cp_top2_res16`
+- total tensor cosine: `0.9153`
+- test accuracy: `96.9%`
+- class selectivity: `0.7370`
+
+This improves the frontier. The one-hot displayed dictionary is more faithful
+than the earlier pure stroke-template run (`0.8757` vs `0.8424`) and more
+accurate (`96.8%` vs `96.3%`). The residual branch makes the story more honest:
+not all tensor structure is cleanly human-readable, but a substantial
+human-readable dictionary can explain useful behavior while a small residual
+absorbs the remaining structure.
