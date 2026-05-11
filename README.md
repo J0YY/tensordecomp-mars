@@ -68,6 +68,26 @@ The best one-hot fidelity result was `cp_res48_pen004`:
 
 This beats the previous high-fidelity one-hot result by a lot on tensor cosine (`0.9553` vs `0.9053`) and matches the original model's accuracy closely. I would not replace the main decomposition with it, because the displayed dictionary explains much less of the tensor by itself. The value of this run is that it maps the tradeoff: residual rank 16 is more dictionary-owned; residual rank 48 is much more faithful but mostly residual-owned.
 
+## Interpretable Residual Follow-Ups
+
+The residual frontier made the next question obvious: can we recover some of that residual-owned fidelity without hiding the explanation in a free residual branch? I tried five follow-ups, one at a time, with the same base model and target tensor.
+
+![Next-step frontier](figures/interpretable_next_steps/interpretable_next_steps_frontier.png)
+
+The most important new result was the two-bank interpretable dictionary. Instead of a free residual branch, it uses two displayed stroke-mask dictionaries: a primary bank and a secondary correction bank. Both keep one-hot class heads.
+
+![Two-bank interpretable dictionary](figures/interpretable_next_steps/two_bank_interpretable_denoised.png)
+
+| Experiment | Why I tried it | Result |
+|---|---|---|
+| Boosted residual decomposition | fit a second interpretable dictionary to the first dictionary's residual | `0.8466` cosine, `96.8%` acc; did not beat the main result |
+| Residual annealing | start residual-heavy, then penalize residual harder | `0.9495` cosine, `96.8%` acc; high fidelity but still `72%` residual-owned |
+| Two-bank dictionary | replace free residual with a second displayed dictionary | `0.8889` cosine, `96.7%` acc, `0%` residual-owned; best no-free-residual result |
+| Activation consistency | encourage components to fire on coherent label groups | `0.8647` cosine; cleaner locality/gini but worse fidelity |
+| Data-derived priors | initialize anchors from MNIST means/differences/PCA instead of hand templates | `0.8833` cosine; competitive but not better than hand stroke priors |
+
+The two-bank result is the strongest genuinely interpretable improvement after the original balanced run. It beats `combo_cp_top1_res8` on dictionary-owned tensor cosine (`0.8889` vs `0.8757`) while keeping one-hot heads and avoiding a free residual. It is not as clean visually as the best visual-prior result, but it is a better answer to the residual-dependence caveat.
+
 ## Cleanest Visual Result
 
 The most visually interpretable result was `mask034_cp_top1_distill`, which used fixed localized masks, smoothness, hard top-1 heads, and logit distillation.
@@ -133,6 +153,7 @@ The honest limitation is that component identity is not fully seed-stable. In a 
 | Stroke-template dictionary | initialize with human stroke families | made components more nameable |
 | Stroke templates + masks + residual | combine readability with a fidelity escape hatch | best balanced result |
 | Residual capacity frontier | test whether one-hot heads can survive much higher fidelity | reached `0.9553` tensor cosine, but with `70%` residual dependence |
+| Interpretable residual follow-ups | try to replace hidden residual capacity with displayed structure | two-bank dictionary reached `0.8889` cosine with no free residual |
 
 ## Summary Table
 
@@ -144,6 +165,7 @@ The honest limitation is that component identity is not fully seed-stable. In a 
 | Localized top-1 masks | `0.6546` | `95.2%` | excellent | cleanest visual explanation |
 | Stroke-template dictionary | `0.8424` | `96.3%` | excellent | human prior works |
 | Stroke templates + masks + residual | `0.8757` | `96.8%` | excellent | best balanced submission |
+| Two-bank displayed dictionary | `0.8889` | `96.7%` | excellent | best no-free-residual result |
 | Top-1 heads + larger residual | `0.9553` | `97.2%` | excellent | highest-fidelity one-hot variant |
 
 ## Conclusions
@@ -189,6 +211,9 @@ PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/render_selected_stroke_va
 
 PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_residual_capacity_frontier.py \
   --epochs 10 --steps 300 --rank 64
+
+PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_interpretable_next_steps.py \
+  --epochs 8 --steps 220
 ```
 
 The detailed metric tables are in `figures/**.csv`, and the implementation is in `scripts/` plus the executed `0_decomposition.ipynb`.
