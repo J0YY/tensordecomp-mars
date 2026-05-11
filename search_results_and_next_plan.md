@@ -136,3 +136,136 @@ features and class-sparse heads.
     class heads or local amplitudes. This may produce a shorter and cleaner
     report figure.
 
+## Follow-Up: Strong Visual Priors
+
+I implemented and ran the next tier of experiments in
+`scripts/search_visual_priors.py`.
+
+This added:
+
+- raw-factor TV and Laplacian smoothness
+- original-logit distillation on 8192 MNIST examples
+- hard top-k class heads
+- fixed Gaussian locality masks
+- visual-first component ranking
+
+Artifacts:
+
+- `figures/visual_priors/visual_prior_results.csv`
+- `figures/visual_priors/best_visual_raw.png`
+- `figures/visual_priors/best_visual_denoised.png`
+- `figures/visual_priors_extreme/visual_prior_results.csv`
+- `figures/visual_priors_extreme/best_visual_raw.png`
+- `figures/visual_priors_extreme/best_visual_denoised.png`
+
+### Strong Visual-Prior Batch
+
+Best by human-readability score:
+
+- `masked_cp_tight_top3`
+- tensor cosine: `0.7216`
+- test accuracy: `96.1%`
+- pattern gini: `0.6804`
+- locality `7x7`: `0.5095`
+- class selectivity: `0.5747`
+- top-1 head mass: `0.5026`
+
+Compared with the earlier high-fidelity rank-64 run, this gives up tensor
+cosine but makes components much more localized and class-selective.
+
+### Extreme Visual Batch
+
+Best by human-readability score:
+
+- `mask034_cp_top1_distill`
+- tensor cosine: `0.6546`
+- test accuracy: `95.2%`
+- pattern gini: `0.6970`
+- locality `7x7`: `0.5084`
+- class selectivity: `1.0000`
+- top-1 head mass: `1.0000`
+
+This is the strongest visual result so far. Against the prompt example:
+
+- **Better by far on measured class-head clarity:** every displayed component
+  has a one-class head.
+- **Better on locality/sparsity:** patterns are much more spatially concentrated
+  than our earlier decompositions.
+- **Still not unambiguously better on semantic naturalness:** some prompt
+  columns look more like natural strokes/edge detectors, while our strongest
+  visual-prior result is more aggressively localized and can look patch-like.
+
+The cleanest honest claim is therefore:
+
+> With hard head sparsity and localized masks, we can beat the prompt example on
+> class-head simplicity and spatial concentration while retaining about 95%
+> decomposed-model accuracy. However, the most faithful decompositions remain
+> visually noisier, and the most visually clean decompositions sacrifice tensor
+> cosine. The next bottleneck is semantic stroke quality, not merely sparsity.
+
+## Remaining Route To A Truly Better-By-Far Result
+
+The next iteration should not just increase penalties. It should change the
+dictionary family:
+
+1. Initialize from actual stroke templates: vertical bars, horizontal bars,
+   diagonals, arcs, hooks, and loops.
+2. Learn local amplitudes and class heads while keeping templates deformable.
+3. Add a small learned residual dictionary for fidelity.
+4. Rank/report only components that pass three filters: high activation on real
+   examples, high class selectivity, and high seed stability.
+5. Refine the original MNIST model training with stronger augmentation/noise so
+   the source tensor itself is less pixel-fragmented.
+
+## Follow-Up: Stroke-Template Dictionary
+
+I implemented the proposed dictionary-family change in
+`scripts/search_stroke_templates.py`.
+
+The dictionary initializes components from human stroke templates:
+
+- horizontal bars
+- vertical bars
+- diagonals
+- arcs
+- loops
+- small corner / endpoint blobs
+
+Each component is allowed a small smooth residual and learned amplitude. The
+goal is to preserve a human stroke prior while still fitting the model's tensor
+and logits. I tested CP and positive/negative split variants with top-1,
+top-2, and top-3 class heads.
+
+Artifacts:
+
+- `figures/stroke_templates/stroke_template_results.csv`
+- `figures/stroke_templates/best_stroke_template_raw.png`
+- `figures/stroke_templates/best_stroke_template_denoised.png`
+
+Best result:
+
+- `stroke_cp_top1_resid03`
+- tensor cosine: `0.8424`
+- test accuracy: `96.3%`
+- pattern gini: `0.4704`
+- locality `7x7`: `0.2931`
+- class selectivity: `1.0000`
+- top-1 head mass: `1.0000`
+
+This is the best balanced result so far: it keeps one-hot class heads and good
+accuracy while recovering much more tensor fidelity than the extreme localized
+mask result. The tradeoff is that it is less spatially concentrated than the
+`mask034_cp_top1_distill` visual-prior run.
+
+Final comparison of strongest approaches:
+
+| Approach | Tensor cosine | Accuracy | Visual strength | Weakness |
+|---|---:|---:|---|---|
+| High-fidelity CP soft symmetry | `0.9497` | `97.1%` | faithful | noisy components |
+| Extreme localized top-1 masks | `0.6546` | `95.2%` | cleanest one-hot heads/locality | lower tensor cosine |
+| Stroke-template dictionary | `0.8424` | `96.3%` | one-hot heads plus human stroke prior | less localized than tight masks |
+
+The most compelling submission story is not that one method dominates all
+metrics. It is that different priors expose a real Pareto frontier between
+faithfulness and human readability, and the stroke-template dictionary is a
+promising way to move along that frontier.

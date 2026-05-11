@@ -366,18 +366,32 @@ def main():
         train_logits = base(train_x).detach()
         base_acc = (base(test.x).argmax(-1) == test.y).float().mean().item()
 
-    specs = [
-        dict(name="raw_smooth_cp_top3", kind="cp", rank=args.rank, smooth=1, topk=3, lr=0.035, seed=1, reg=Reg(raw_l1=2e-4, raw_tv=5e-2, raw_lap=1e-2, d_l1=2e-4, distill=0.08)),
-        dict(name="raw_smooth_cp_top2", kind="cp", rank=args.rank, smooth=1, topk=2, lr=0.035, seed=2, reg=Reg(raw_l1=2e-4, raw_tv=5e-2, raw_lap=1e-2, d_l1=2e-4, distill=0.08)),
-        dict(name="smooth2_cp_top3", kind="cp", rank=args.rank, smooth=2, topk=3, lr=0.035, seed=3, reg=Reg(raw_l1=2e-4, raw_tv=4e-2, raw_lap=8e-3, d_l1=2e-4, distill=0.10)),
-        dict(name="masked_cp_wide_top3", kind="cp", rank=args.rank, smooth=1, topk=3, mask_sigma=0.50, lr=0.04, seed=4, reg=Reg(raw_l1=2e-4, raw_tv=2e-2, raw_lap=6e-3, distill=0.10)),
-        dict(name="masked_cp_tight_top3", kind="cp", rank=args.rank, smooth=1, topk=3, mask_sigma=0.34, lr=0.04, seed=5, reg=Reg(raw_l1=2e-4, raw_tv=2e-2, raw_lap=6e-3, distill=0.12)),
-        dict(name="raw_smooth_split_top3", kind="split", rank=args.rank, smooth=1, topk=3, lr=0.035, seed=6, reg=Reg(raw_l1=2e-4, raw_tv=5e-2, raw_lap=1e-2, d_l1=2e-4, distill=0.08)),
-        dict(name="raw_smooth_split_top2", kind="split", rank=args.rank, smooth=1, topk=2, lr=0.035, seed=7, reg=Reg(raw_l1=2e-4, raw_tv=5e-2, raw_lap=1e-2, d_l1=2e-4, distill=0.08)),
-        dict(name="smooth2_split_top3", kind="split", rank=args.rank, smooth=2, topk=3, lr=0.035, seed=8, reg=Reg(raw_l1=2e-4, raw_tv=4e-2, raw_lap=8e-3, d_l1=2e-4, distill=0.10)),
-        dict(name="masked_split_wide_top3", kind="split", rank=args.rank, smooth=1, topk=3, mask_sigma=0.50, lr=0.04, seed=9, reg=Reg(raw_l1=2e-4, raw_tv=2e-2, raw_lap=6e-3, distill=0.10)),
-        dict(name="masked_split_tight_top3", kind="split", rank=args.rank, smooth=1, topk=3, mask_sigma=0.34, lr=0.04, seed=10, reg=Reg(raw_l1=2e-4, raw_tv=2e-2, raw_lap=6e-3, distill=0.12)),
-    ]
+    if args.outdir.name.endswith("extreme"):
+        specs = [
+            dict(name="mask028_cp_top2_distill", kind="cp", rank=args.rank, smooth=1, topk=2, mask_sigma=0.28, lr=0.04, seed=11, reg=Reg(raw_l1=3e-4, raw_tv=2e-2, raw_lap=8e-3, distill=0.18)),
+            dict(name="mask030_cp_top2_distill", kind="cp", rank=args.rank, smooth=1, topk=2, mask_sigma=0.30, lr=0.04, seed=12, reg=Reg(raw_l1=3e-4, raw_tv=2e-2, raw_lap=8e-3, distill=0.18)),
+            dict(name="mask034_cp_top2_distill", kind="cp", rank=args.rank, smooth=1, topk=2, mask_sigma=0.34, lr=0.04, seed=13, reg=Reg(raw_l1=3e-4, raw_tv=2e-2, raw_lap=8e-3, distill=0.18)),
+            dict(name="mask040_cp_top2_distill", kind="cp", rank=args.rank, smooth=1, topk=2, mask_sigma=0.40, lr=0.04, seed=14, reg=Reg(raw_l1=3e-4, raw_tv=2e-2, raw_lap=8e-3, distill=0.18)),
+            dict(name="mask034_cp_top1_distill", kind="cp", rank=args.rank, smooth=1, topk=1, mask_sigma=0.34, lr=0.04, seed=15, reg=Reg(raw_l1=3e-4, raw_tv=2e-2, raw_lap=8e-3, distill=0.22)),
+            dict(name="mask028_split_top2_distill", kind="split", rank=args.rank, smooth=1, topk=2, mask_sigma=0.28, lr=0.04, seed=16, reg=Reg(raw_l1=3e-4, raw_tv=2e-2, raw_lap=8e-3, distill=0.18)),
+            dict(name="mask030_split_top2_distill", kind="split", rank=args.rank, smooth=1, topk=2, mask_sigma=0.30, lr=0.04, seed=17, reg=Reg(raw_l1=3e-4, raw_tv=2e-2, raw_lap=8e-3, distill=0.18)),
+            dict(name="mask034_split_top2_distill", kind="split", rank=args.rank, smooth=1, topk=2, mask_sigma=0.34, lr=0.04, seed=18, reg=Reg(raw_l1=3e-4, raw_tv=2e-2, raw_lap=8e-3, distill=0.18)),
+            dict(name="mask040_split_top2_distill", kind="split", rank=args.rank, smooth=1, topk=2, mask_sigma=0.40, lr=0.04, seed=19, reg=Reg(raw_l1=3e-4, raw_tv=2e-2, raw_lap=8e-3, distill=0.18)),
+            dict(name="mask034_split_top1_distill", kind="split", rank=args.rank, smooth=1, topk=1, mask_sigma=0.34, lr=0.04, seed=20, reg=Reg(raw_l1=3e-4, raw_tv=2e-2, raw_lap=8e-3, distill=0.22)),
+        ]
+    else:
+        specs = [
+            dict(name="raw_smooth_cp_top3", kind="cp", rank=args.rank, smooth=1, topk=3, lr=0.035, seed=1, reg=Reg(raw_l1=2e-4, raw_tv=5e-2, raw_lap=1e-2, d_l1=2e-4, distill=0.08)),
+            dict(name="raw_smooth_cp_top2", kind="cp", rank=args.rank, smooth=1, topk=2, lr=0.035, seed=2, reg=Reg(raw_l1=2e-4, raw_tv=5e-2, raw_lap=1e-2, d_l1=2e-4, distill=0.08)),
+            dict(name="smooth2_cp_top3", kind="cp", rank=args.rank, smooth=2, topk=3, lr=0.035, seed=3, reg=Reg(raw_l1=2e-4, raw_tv=4e-2, raw_lap=8e-3, d_l1=2e-4, distill=0.10)),
+            dict(name="masked_cp_wide_top3", kind="cp", rank=args.rank, smooth=1, topk=3, mask_sigma=0.50, lr=0.04, seed=4, reg=Reg(raw_l1=2e-4, raw_tv=2e-2, raw_lap=6e-3, distill=0.10)),
+            dict(name="masked_cp_tight_top3", kind="cp", rank=args.rank, smooth=1, topk=3, mask_sigma=0.34, lr=0.04, seed=5, reg=Reg(raw_l1=2e-4, raw_tv=2e-2, raw_lap=6e-3, distill=0.12)),
+            dict(name="raw_smooth_split_top3", kind="split", rank=args.rank, smooth=1, topk=3, lr=0.035, seed=6, reg=Reg(raw_l1=2e-4, raw_tv=5e-2, raw_lap=1e-2, d_l1=2e-4, distill=0.08)),
+            dict(name="raw_smooth_split_top2", kind="split", rank=args.rank, smooth=1, topk=2, lr=0.035, seed=7, reg=Reg(raw_l1=2e-4, raw_tv=5e-2, raw_lap=1e-2, d_l1=2e-4, distill=0.08)),
+            dict(name="smooth2_split_top3", kind="split", rank=args.rank, smooth=2, topk=3, lr=0.035, seed=8, reg=Reg(raw_l1=2e-4, raw_tv=4e-2, raw_lap=8e-3, d_l1=2e-4, distill=0.10)),
+            dict(name="masked_split_wide_top3", kind="split", rank=args.rank, smooth=1, topk=3, mask_sigma=0.50, lr=0.04, seed=9, reg=Reg(raw_l1=2e-4, raw_tv=2e-2, raw_lap=6e-3, distill=0.10)),
+            dict(name="masked_split_tight_top3", kind="split", rank=args.rank, smooth=1, topk=3, mask_sigma=0.34, lr=0.04, seed=10, reg=Reg(raw_l1=2e-4, raw_tv=2e-2, raw_lap=6e-3, distill=0.12)),
+        ]
 
     rows, models = [], {}
     for spec in specs:

@@ -1,0 +1,3 @@
+device=mps
+base_acc=0.972900
+best={'name': 'stroke_cp_top1_resid03', 'kind': 'cp', 'rank': 72, 'topk': 1, 'residual_scale': 0.3, 'similarity': 0.8423770666122437, 'test_acc': 0.9630999565124512, 'pattern_gini': 0.47042858600616455, 'locality_7x7': 0.293133944272995, 'class_selectivity': 1.0, 'head_top1_frac': 1.0, 'display_tv': 0.04679141938686371, 'top_sigma_frac': 0.1441246122121811, 'submission_score': 2.0105031386017798}

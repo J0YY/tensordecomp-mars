@@ -1,144 +1,219 @@
 # Tensor Decomposition Experiments
 
-This repo contains an extended solution notebook for the MARS V applicant task,
-focused on decomposing bilinear MNIST weights into shared human-readable concepts.
+This is my extended solution for the MARS V applicant task on decomposing MNIST bilinear weights into human concepts. I treated the assignment as a small research loop: reproduce the provided decomposition, define faithfulness/readability metrics, try several priors, and keep the strongest visual and quantitative results.
 
-Start with:
+The short version: plain tensor reconstruction gives high fidelity but noisy components. Adding human-facing priors creates a clear Pareto frontier. The best visual result has very clean, one-class heads and localized components; the best balanced result uses a stroke-template dictionary and keeps one-hot heads while recovering substantially more tensor fidelity.
 
-- `instructions.md` - original task prompt
-- `0_introduction.ipynb` - bilinear interaction background
-- `1_image.ipynb` - MNIST eigendecomposition tutorial
-- `0_decomposition.ipynb` - final executed experiment notebook
-- `decomposition_plan.md` - local research plan and experiment rationale
-- `search_results_and_next_plan.md` - comparison to the prompt example and next experiments
-- `image/` - minimal local implementation of the notebook helper package
+## Files To Read
 
-## Main Idea
+- `0_decomposition.ipynb` - executed notebook with the main decomposition experiments
+- `decomposition_plan.md` - initial research plan
+- `search_results_and_next_plan.md` - detailed experiment log and next-step reasoning
+- `scripts/search_decompositions.py` - first broad search over CP/symmetric/evidence-split variants
+- `scripts/search_visual_priors.py` - stronger visual-prior search with masks, hard heads, and distillation
+- `scripts/search_stroke_templates.py` - human stroke-template dictionary experiment
+- `figures/` - exported figures and CSV metric tables
 
-The original MNIST bilinear model computes:
+I also added a minimal local `image/` package because the helper source imported by the notebooks was not present in the provided directory.
+
+## Main Question
+
+The trained bilinear MNIST model computes logits from an interaction tensor:
 
 ```text
 logit_c(x) = sum_ij B[c, i, j] x_i x_j
 ```
 
-The final notebook compares several ways to approximate the full interaction
-tensor with shared components:
+The baseline decomposition approximates the full tensor with shared components:
 
 ```text
 B[c, i, j] ~= sum_r L[i, r] R[j, r] D[c, r]
 ```
 
-The goal is not only high tensor reconstruction. The target outcome is a short
-dictionary of components that are faithful to the model, stable across seeds,
-localized in image space, and easy to interpret as digit strokes or
-counter-strokes.
+The goal is not just reconstruction. A useful decomposition should be:
 
-## Variants Tried
+- faithful to the original model
+- short and reusable across classes
+- visually interpretable as strokes, edges, loops, or counter-evidence
+- class-selective enough that the component head is easy to understand
+- stable enough not to be just an optimizer artifact
 
-The notebook currently runs these decomposition families:
+## Strongest Result For Visual Interpretability
 
-- provided `image.sparse.Model` baseline
-- CP factorization with a soft symmetry penalty
+The cleanest visual result came from `mask034_cp_top1_distill`, which uses:
+
+- CP-style factors
+- fixed localized Gaussian masks
+- raw-factor smoothness penalties
+- logit distillation against the original model
+- hard top-1 class heads
+- visual-first component ranking
+
+![Extreme visual-prior decomposition](figures/visual_priors_extreme/best_visual_denoised.png)
+
+Metrics:
+
+| Metric | Value |
+|---|---:|
+| tensor cosine | `0.6546` |
+| decomposed test accuracy | `95.2%` |
+| pattern gini | `0.6970` |
+| 7x7 locality | `0.5084` |
+| class selectivity | `1.0000` |
+| top-1 head mass | `1.0000` |
+
+This beats the prompt example on measured head clarity and locality: every displayed component has a one-class head, and the image patterns are much more spatially concentrated than the unconstrained decompositions. The cost is lower tensor cosine, so I would present it as the best visual explanation, not the most faithful decomposition.
+
+## Best Balanced Result
+
+The best balance came from the stroke-template dictionary, `stroke_cp_top1_resid03`. Here I initialized components from human stroke templates, then allowed a small smooth residual and learned amplitudes/class heads.
+
+The template bank includes:
+
+- horizontal bars
+- vertical bars
+- diagonals
+- arcs
+- loops
+- endpoint/corner blobs
+
+![Stroke-template decomposition](figures/stroke_templates/best_stroke_template_denoised.png)
+
+Metrics:
+
+| Metric | Value |
+|---|---:|
+| tensor cosine | `0.8424` |
+| decomposed test accuracy | `96.3%` |
+| pattern gini | `0.4704` |
+| 7x7 locality | `0.2931` |
+| class selectivity | `1.0000` |
+| top-1 head mass | `1.0000` |
+
+This is the result I would emphasize as the most promising research direction. It preserves one-hot class heads and good accuracy while recovering much more tensor fidelity than the extreme mask-only visual result. It also directly tests the hypothesis that the model can be described in terms of reusable human stroke primitives.
+
+## Highest-Fidelity Result
+
+The highest-fidelity run was `cp_soft_sym_l1tv` from the broader search.
+
+| Metric | Value |
+|---|---:|
+| tensor cosine | `0.9497` |
+| decomposed test accuracy | `97.1%` |
+
+This is useful as a control: the tensor can be reconstructed very well, but the resulting components are visually noisier and less immediately interpretable. This made the core tradeoff clear: reconstruction alone is not enough.
+
+## What I Tried
+
+### 1. Provided Sparse Baseline
+
+I first reproduced the provided `image.sparse.Model` style CP decomposition. In the executed balanced notebook run, the baseline reached:
+
+- tensor cosine: `0.8589`
+- decomposed accuracy: `94.9%`
+
+It was a solid starting point but visually mixed multiple strokes per component.
+
+### 2. CP, Symmetric, And Evidence-Split Variants
+
+I tested:
+
+- CP factors with soft symmetry
 - strictly symmetric factors, `L = R`
-- symmetric factors with sparsity, smoothness, class sparsity, and duplicate penalties
-- direct positive/negative evidence split
-- sparse/smooth evidence split
-- nonnegative stroke-style evidence split
-- eigenvector-seeded symmetric dictionary
-- multi-seed consensus run for the strongest family
+- positive/negative evidence split factors
+- sparse and smooth variants
+- nonnegative stroke variants
+- eigenvector-seeded symmetric dictionaries
 
-The checked-in run used the notebook's `balanced` profile: 4 MNIST training
-epochs, rank-32 main decompositions, rank-48 nonnegative strokes, and shortened
-optimization loops. Set `RUN_PROFILE=full` before executing the notebook to run
-the longer rank-64/rank-96 version.
+The best early result was `evidence split sparse smooth r32`:
 
-## Evaluation
+- tensor cosine: `0.8770`
+- decomposed accuracy: `95.5%`
 
-Each variant is scored with:
+The strictly symmetric variants were conceptually clean but underfit. The nonnegative-only factors were a useful negative result: they looked constrained but did not fit the model.
 
-- tensor cosine similarity to the original interaction tensor
-- test accuracy of the decomposed model
-- component sparsity / Gini score
-- `7 x 7` patch locality
-- class selectivity of output weights
-- top-component spectrum concentration
-- keep-only and drop-top-k faithfulness curves
-- activation galleries for top components
-- seed-consensus matching score
+### 3. Heavier Rank-64 Search
 
-## Visual Summary
+I then increased capacity and optimization time. The best high-fidelity result was:
 
-Running `0_decomposition.ipynb` exports interactive HTML figures and PNGs into
-`figures/`. The PNGs below are the intended README snapshots.
+- `cp_soft_sym_l1tv`
+- tensor cosine: `0.9497`
+- decomposed accuracy: `97.1%`
 
-### Baseline Components
+This showed that fidelity was not the main blocker. The remaining problem was human readability.
 
-![Provided sparse baseline](figures/components_provided_sparse_baseline.png)
+### 4. Strong Visual Priors
 
-### Best Components
+I added:
 
-![Best decomposition components](figures/components_best_decomposition.png)
+- raw-factor smoothness and Laplacian penalties
+- logit distillation on MNIST examples
+- hard top-k class heads
+- localized Gaussian masks
+- visual ranking by locality, sparsity, head selectivity, and component strength
 
-### Faithfulness Curves
+This produced the cleanest visual result, `mask034_cp_top1_distill`, with one-hot heads and strong locality.
 
-![Faithfulness curves](figures/faithfulness_best_decomposition.png)
+### 5. Stroke-Template Dictionary
 
-### Activation Gallery
+Finally, I changed the dictionary family instead of only increasing regularization. Components were initialized from explicit stroke templates and given small smooth residuals. This produced the best balanced result: `stroke_cp_top1_resid03`.
 
-![Activation gallery](figures/activation_gallery_best_decomposition.png)
+## Summary Table
 
-### Consensus Reference
+| Approach | Tensor cosine | Accuracy | Why it matters | Weakness |
+|---|---:|---:|---|---|
+| Provided sparse baseline | `0.8589` | `94.9%` | starting point from task skeleton | mixed/noisy components |
+| Evidence split sparse/smooth | `0.8770` | `95.5%` | better shared decomposition | still visually noisy |
+| CP soft symmetry rank-64 | `0.9497` | `97.1%` | highest fidelity | poor readability |
+| Extreme localized top-1 masks | `0.6546` | `95.2%` | cleanest visual heads/locality | lower tensor cosine |
+| Stroke-template dictionary | `0.8424` | `96.3%` | best interpretability/fidelity compromise | less local than tight masks |
 
-![Consensus components](figures/components_consensus_reference_evidence_split_sparse_smooth.png)
+## Interpretation
 
-## Provisional Conclusions
+The main finding is a Pareto frontier. If we optimize only tensor reconstruction, we get high-fidelity but visually superposed features. If we force locality and one-class heads, we get much clearer components while preserving surprisingly good classification accuracy. The stroke-template dictionary is the most interesting middle ground because it encodes an explicit human prior without collapsing accuracy.
 
-The executed balanced run found:
+This is the direction I would keep pursuing with a MARS mentor or at Goodfire: use weight-level decompositions, but give the dictionary enough structure that the discovered components can become actual concepts rather than arbitrary low-rank factors.
 
-- original bilinear MNIST model: `97.4%` test accuracy after 4 epochs
-- best decomposition by the notebook score: `evidence split sparse smooth r32`
-- best tensor cosine similarity: `0.8770`
-- best decomposed-model test accuracy among custom decompositions: `96.1%` from
-  plain `evidence split r32`
-- provided sparse baseline: `0.8589` similarity and `94.9%` test accuracy
-- nonnegative stroke factors failed in this parameterization: `0.0871`
-  similarity and `43.2%` accuracy
-- seed consensus for the sparse/smooth evidence split was moderate, around
-  `0.54` component-match similarity against the reference seed
+## Reproducing
 
-The main empirical takeaway is that the evidence-split parameterization was the
-strongest local direction: it beat the provided sparse baseline on tensor
-similarity while retaining useful accuracy. The sparse/smooth version traded a
-small amount of accuracy for better class selectivity and became the selected
-best candidate. The strictly symmetric variants were cleaner conceptually but
-underfit. The nonnegative-only stroke attempt was a useful negative result.
-
-Full metrics are in `figures/decomposition_results.csv`.
-
-An additional 10-variant search is logged in `search_results_and_next_plan.md`.
-The short version: the heavier rank-64 pass improved fidelity to about `0.95`
-cosine similarity and `97%` decomposed accuracy, but the prompt example still
-looks better by human readability. The next work should target raw-factor
-smoothness, hard class-head sparsity, localized masks, and sparse rotations
-after CP.
-
-## Running
-
-Use the local virtual environment or install the minimal requirements:
+Use Python 3.11. The default Python on this machine was 3.14, which was too new for the PyTorch stack, so I used a local venv.
 
 ```bash
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
+```
+
+Execute the notebook:
+
+```bash
 PYTORCH_ENABLE_MPS_FALLBACK=1 RUN_PROFILE=balanced \
   .venv/bin/jupyter nbconvert --to notebook --execute 0_decomposition.ipynb \
   --output 0_decomposition.executed.ipynb --ExecutePreprocessor.timeout=3600
 ```
 
-Optional PNG export requires Plotly's static image backend, usually:
+Run the stronger searches:
 
 ```bash
-pip install kaleido
+PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_visual_priors.py \
+  --epochs 10 --steps 320 --rank 64
+
+PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_visual_priors.py \
+  --epochs 10 --steps 260 --rank 64 --outdir figures/visual_priors_extreme
+
+PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_stroke_templates.py \
+  --epochs 10 --steps 360 --rank 72
 ```
 
-Without `kaleido`, the notebook still writes interactive `.html` figures to
-`figures/`.
+The CSV outputs in `figures/` contain the full metric tables.
+
+## Next Steps
+
+The next best experiment is to combine the two strongest ideas:
+
+1. Start from stroke templates.
+2. Add learnable localized masks instead of fixed masks.
+3. Keep hard top-1/top-2 class heads.
+4. Add a small high-fidelity residual dictionary.
+5. Match components across random seeds and only report recurring concepts.
+
+That should improve semantic stroke quality without giving up the class-head clarity that made the visual-prior runs compelling.
