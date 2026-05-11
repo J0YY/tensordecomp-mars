@@ -117,6 +117,42 @@ def activation_gallery(model, train, out_path, k=8, topn=8):
     plt.close(fig)
 
 
+@torch.no_grad()
+def class_consensus_panel(models, seeds, out_path):
+    rows = 10
+    cols = len(seeds) * 2
+    fig, axes = plt.subplots(rows, cols, figsize=(1.05 * cols, 1.05 * rows))
+    if rows == 1:
+        axes = axes[None, :]
+    for row_cls in range(10):
+        row_images = []
+        selections = []
+        for seed in seeds:
+            model = models[seed]
+            plus, minus, down, sigma = model.decompose(visual=True)
+            strength = down[row_cls].abs() * sigma / sigma.max().clamp_min(1e-8)
+            idx = int(strength.argmax().item())
+            row_images.extend([plus[:, idx], minus[:, idx]])
+            sign = "+" if down[row_cls, idx] >= 0 else "-"
+            selections.append((idx, sign))
+        vmax = max(float(torch.stack(row_images, dim=1).abs().max()), 1e-6)
+        for seed_pos, seed in enumerate(seeds):
+            idx, sign = selections[seed_pos]
+            model = models[seed]
+            plus, minus, down, sigma = model.decompose(visual=True)
+            for offset, image in enumerate([plus[:, idx], minus[:, idx]]):
+                ax = axes[row_cls, 2 * seed_pos + offset]
+                ax.imshow(image.detach().cpu().reshape(28, 28), cmap="RdBu_r", vmin=-vmax, vmax=vmax)
+                ax.set_xticks([])
+                ax.set_yticks([])
+                if row_cls == 0:
+                    ax.set_title(f"s{seed} {'pos' if offset == 0 else 'neg'}", fontsize=8)
+            axes[row_cls, 2 * seed_pos].set_ylabel(f"{row_cls} {sign}", rotation=0, labelpad=15, va="center")
+    fig.suptitle("Best displayed component per digit across seeds", y=1.01, fontsize=13)
+    fig.savefig(out_path, dpi=220, bbox_inches="tight")
+    plt.close(fig)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=8)
@@ -152,6 +188,7 @@ def main():
 
     best = sorted(rows, key=lambda r: r["frontier_score"], reverse=True)[0]
     activation_gallery(models[best["seed"]], train, args.outdir / "best_combo_activation_gallery.png")
+    class_consensus_panel(models, args.seeds, args.outdir / "best_combo_class_consensus.png")
     with (args.outdir / "summary.txt").open("w") as f:
         f.write(f"device={device}\n")
         f.write(f"base_acc={base_acc:.6f}\n")

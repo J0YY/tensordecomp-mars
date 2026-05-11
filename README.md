@@ -68,6 +68,14 @@ I also generated an activation gallery for the final stroke-mask-residual model.
 
 This is a useful sanity check because it asks whether components fire on coherent examples, not only whether their weights look nice. Many top activations are class-consistent: loop-like components fire on zeros/nines, slanted-stroke components fire on sevens/twos, and vertical/hook-like components fire on fives/twos depending on sign.
 
+## Final Stability Check
+
+The last thing I tried was a seed-consensus panel. For each digit and each seed, I selected the strongest displayed component assigned to that digit and plotted its positive/negative factors.
+
+![Seed consensus panel](figures/best_combo_validation/best_combo_class_consensus.png)
+
+This did not produce a better headline visual, but it made the remaining limitation clearer. The method reliably finds one-class, local, high-accuracy decompositions across seeds, but the exact component basis is still not canonical. That is why I report this as a strong decomposition family rather than claiming that one run has discovered the unique human concept basis.
+
 ## Comparison To The Prompt Example
 
 The prompt screenshot shows plausible edge detectors after about one hour, but the heads are still somewhat mixed and the visual factors are noisy.
@@ -78,7 +86,7 @@ Compared with that example, this submission is stronger in three concrete ways:
 - The visual-prior run is substantially more localized: `7x7 locality = 0.5084`.
 - The balanced run keeps the model useful: `96.8%` decomposed accuracy with `0.8757` total tensor cosine.
 
-The honest limitation is that component identity is not fully seed-stable. In a three-seed validation run of the final method, all seeds kept the same high-level metrics, but top-component matching against seed 1 averaged only `0.435`. That means the family of solutions is stable, but individual components still need a consensus or alignment step before I would claim exact reproducibility.
+The honest limitation is that component identity is not fully seed-stable. In a three-seed validation run of the final method, all seeds kept the same high-level metrics, but top-component matching against seed 1 averaged `0.428`. That means the family of solutions is stable, but individual components still need a consensus or alignment step before I would claim exact reproducibility.
 
 ## What I Tried
 
@@ -109,7 +117,7 @@ The honest limitation is that component identity is not fully seed-stable. In a 
 
 The main result is a Pareto frontier. Tensor cosine alone finds faithful but ugly decompositions. Strong visual priors find clean concepts but sacrifice reconstruction. The most promising direction is to separate the model into an interpretable displayed dictionary plus a measured residual branch.
 
-Objectively, I think this is stronger than a typical quick applicant solution because it does not stop at sparse CP: it tests multiple priors, reports negative results, adds visual metrics, and checks activations. The main gap versus a polished research result is seed-level concept stability. The next experiment I would run is consensus factor matching across seeds, then report only recurring components.
+Objectively, I think this is stronger than a typical quick applicant solution because it does not stop at sparse CP: it tests multiple priors, reports negative results, adds visual metrics, checks activations, and includes a stability stress test. The main gap versus a polished research result is seed-level concept stability. The next experiment I would run is consensus factor matching across more seeds, then report only recurring components.
 
 ## Reproducing
 
