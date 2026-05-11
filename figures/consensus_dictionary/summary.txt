@@ -1,0 +1,8 @@
+device=mps
+base_acc=0.968800
+seeds=[1, 2, 3, 4, 5]
+components=140
+clusters=66
+chosen=12
+chosen_mean_seed_support=3.333333
+chosen_mean_similarity=0.487723

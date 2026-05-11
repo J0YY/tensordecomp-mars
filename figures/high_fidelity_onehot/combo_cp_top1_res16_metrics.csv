@@ -1,0 +1,2 @@
+name,kind,rank,residual_rank,topk,similarity,main_similarity,test_acc,pattern_gini,locality_7x7,class_selectivity,head_top1_frac,display_tv,top_sigma_frac,frontier_score,base_acc,device
+combo_cp_top1_res16,cp,64,16,1,0.9053245186805725,0.5391284227371216,0.9688999652862549,0.507349967956543,0.3199239671230316,1.0,1.0,0.042068082839250565,0.17456640303134918,1.9738399669528004,0.9736999869346619,mps

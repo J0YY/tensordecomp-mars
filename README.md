@@ -43,6 +43,24 @@ The best balanced method was `combo_cp_top1_res8`:
 
 This is the result I would submit as the main decomposition. It is much clearer than the plain sparse baseline while keeping high classification accuracy. The residual branch is important: it lets the visible dictionary stay human-readable instead of forcing every bit of tensor mass into the displayed concepts.
 
+## Higher-Fidelity One-Hot Alternative
+
+After the stability pass, I also rendered a higher-capacity version of the same idea: `combo_cp_top1_res16`. It keeps the displayed class heads one-hot but doubles the residual rank from 8 to 16.
+
+![High-fidelity one-hot variant](figures/high_fidelity_onehot/combo_cp_top1_res16_denoised.png)
+
+| Metric | Value |
+|---|---:|
+| total tensor cosine | `0.9053` |
+| displayed dictionary cosine | `0.5391` |
+| decomposed test accuracy | `96.9%` |
+| class selectivity | `1.0000` |
+| top-1 head mass | `1.0000` |
+| 7x7 locality | `0.3199` |
+| pattern gini | `0.5073` |
+
+This is objectively better on tensor fidelity than the main balanced result, but the displayed dictionary explains less of the tensor by itself. I read this as evidence for a useful knob: increasing residual capacity improves faithfulness while preserving head clarity, but shifts more work into the less-interpretable residual branch.
+
 ## Cleanest Visual Result
 
 The most visually interpretable result was `mask034_cp_top1_distill`, which used fixed localized masks, smoothness, hard top-1 heads, and logit distillation.
@@ -75,6 +93,12 @@ The last thing I tried was a seed-consensus panel. For each digit and each seed,
 ![Seed consensus panel](figures/best_combo_validation/best_combo_class_consensus.png)
 
 This did not produce a better headline visual, but it made the remaining limitation clearer. The method reliably finds one-class, local, high-accuracy decompositions across seeds, but the exact component basis is still not canonical. That is why I report this as a strong decomposition family rather than claiming that one run has discovered the unique human concept basis.
+
+I also built a five-seed consensus dictionary by clustering recurring components. The top 12 consensus clusters had average support of `3.33/5` seeds and average within-cluster similarity of `0.488`.
+
+![Consensus dictionary](figures/consensus_dictionary/consensus_dictionary.png)
+
+This is a better stability diagnostic than a better visual explanation. It suggests the next real improvement would be a training objective that directly encourages cross-seed alignment, not just a post-hoc clustering pass.
 
 ## Comparison To The Prompt Example
 
@@ -112,6 +136,7 @@ The honest limitation is that component identity is not fully seed-stable. In a 
 | Localized top-1 masks | `0.6546` | `95.2%` | excellent | cleanest visual explanation |
 | Stroke-template dictionary | `0.8424` | `96.3%` | excellent | human prior works |
 | Stroke templates + masks + residual | `0.8757` | `96.8%` | excellent | best balanced submission |
+| Top-1 heads + larger residual | `0.9053` | `96.9%` | excellent | best faithful one-hot variant |
 
 ## Conclusions
 
@@ -147,6 +172,12 @@ PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_stroke_mask_residu
 
 PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/validate_best_combo.py \
   --epochs 8 --steps 240 --rank 64 --seeds 1 2 3
+
+PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/build_consensus_dictionary.py \
+  --epochs 8 --steps 220 --rank 64 --seeds 1 2 3 4 5 --min-cos 0.32
+
+PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/render_selected_stroke_variant.py \
+  --variant combo_cp_top1_res16 --epochs 10 --steps 340 --rank 64
 ```
 
 The detailed metric tables are in `figures/**.csv`, and the implementation is in `scripts/` plus the executed `0_decomposition.ipynb`.
