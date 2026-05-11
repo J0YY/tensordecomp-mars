@@ -43,23 +43,30 @@ The best balanced method was `combo_cp_top1_res8`:
 
 This is the result I would submit as the main decomposition. It is much clearer than the plain sparse baseline while keeping high classification accuracy. The residual branch is important: it lets the visible dictionary stay human-readable instead of forcing every bit of tensor mass into the displayed concepts.
 
-## Higher-Fidelity One-Hot Alternative
+## Residual Capacity Frontier
 
-After the stability pass, I also rendered a higher-capacity version of the same idea: `combo_cp_top1_res16`. It keeps the displayed class heads one-hot but doubles the residual rank from 8 to 16.
+After the `combo_cp_top1_res16` run improved tensor cosine from `0.8757` to `0.9053`, I ran a more systematic residual-capacity sweep. The reason was simple: if a residual branch improves faithfulness while preserving one-hot displayed heads, then the important question is not "does residual help?" but "how much of the explanation has moved into the residual?"
 
-![High-fidelity one-hot variant](figures/high_fidelity_onehot/combo_cp_top1_res16_denoised.png)
+I swept CP/split variants with residual ranks 16, 24, 32, and 48, plus different residual penalties. I also included one top-2-head control to check whether relaxing head sparsity was worth it.
+
+![Residual capacity frontier](figures/residual_capacity_frontier/residual_capacity_frontier.png)
+
+The best one-hot fidelity result was `cp_res48_pen004`:
+
+![Best residual-capacity result](figures/residual_capacity_frontier/best_onehot_fidelity_cp_res48_pen004_denoised.png)
 
 | Metric | Value |
 |---|---:|
-| total tensor cosine | `0.9053` |
-| displayed dictionary cosine | `0.5391` |
-| decomposed test accuracy | `96.9%` |
+| total tensor cosine | `0.9553` |
+| displayed dictionary cosine | `0.2865` |
+| decomposed test accuracy | `97.2%` |
 | class selectivity | `1.0000` |
 | top-1 head mass | `1.0000` |
-| 7x7 locality | `0.3199` |
-| pattern gini | `0.5073` |
+| 7x7 locality | `0.3382` |
+| pattern gini | `0.5531` |
+| residual fraction | `0.7001` |
 
-This is objectively better on tensor fidelity than the main balanced result, but the displayed dictionary explains less of the tensor by itself. I read this as evidence for a useful knob: increasing residual capacity improves faithfulness while preserving head clarity, but shifts more work into the less-interpretable residual branch.
+This beats the previous high-fidelity one-hot result by a lot on tensor cosine (`0.9553` vs `0.9053`) and matches the original model's accuracy closely. I would not replace the main decomposition with it, because the displayed dictionary explains much less of the tensor by itself. The value of this run is that it maps the tradeoff: residual rank 16 is more dictionary-owned; residual rank 48 is much more faithful but mostly residual-owned.
 
 ## Cleanest Visual Result
 
@@ -125,6 +132,7 @@ The honest limitation is that component identity is not fully seed-stable. In a 
 | Localized visual priors | force local, sparse, smooth components | produced the cleanest human-readable result |
 | Stroke-template dictionary | initialize with human stroke families | made components more nameable |
 | Stroke templates + masks + residual | combine readability with a fidelity escape hatch | best balanced result |
+| Residual capacity frontier | test whether one-hot heads can survive much higher fidelity | reached `0.9553` tensor cosine, but with `70%` residual dependence |
 
 ## Summary Table
 
@@ -136,7 +144,7 @@ The honest limitation is that component identity is not fully seed-stable. In a 
 | Localized top-1 masks | `0.6546` | `95.2%` | excellent | cleanest visual explanation |
 | Stroke-template dictionary | `0.8424` | `96.3%` | excellent | human prior works |
 | Stroke templates + masks + residual | `0.8757` | `96.8%` | excellent | best balanced submission |
-| Top-1 heads + larger residual | `0.9053` | `96.9%` | excellent | best faithful one-hot variant |
+| Top-1 heads + larger residual | `0.9553` | `97.2%` | excellent | highest-fidelity one-hot variant |
 
 ## Conclusions
 
@@ -178,6 +186,9 @@ PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/build_consensus_dictionar
 
 PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/render_selected_stroke_variant.py \
   --variant combo_cp_top1_res16 --epochs 10 --steps 340 --rank 64
+
+PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_residual_capacity_frontier.py \
+  --epochs 10 --steps 300 --rank 64
 ```
 
 The detailed metric tables are in `figures/**.csv`, and the implementation is in `scripts/` plus the executed `0_decomposition.ipynb`.
