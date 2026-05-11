@@ -1,35 +1,35 @@
 # Decomposing MNIST Weights Into Human Concepts
 
-This is my findings report for the MARS V applicant task. The goal was to move beyond per-class eigendecomposition and find tensor decompositions whose components look like human-meaningful MNIST evidence: strokes, hooks, loops, gaps, and counter-evidence.
+This is my findings report for the MARS V decomposition task. I treated the assignment less like "find the one correct factorization" and more like a small research loop: keep asking what made the current explanation unsatisfying, then try the next prior that seemed most likely to fix that exact failure.
 
-The short version: optimizing reconstruction alone works numerically but gives visually superposed components. The strongest result came from adding human-facing priors: localized masks, sparse class heads, stroke-template initialization, logit distillation, and a small residual branch for non-interpretable leftover structure.
+The short version is:
 
-## Thought Process
+- Reconstruction alone is easy to improve, but it gives noisy, superposed features.
+- The cleanest components came from forcing locality and one-class heads.
+- The best faithful model used a big residual branch, but that made the explanation less honest.
+- The best interpretability improvement came from replacing hidden residual capacity with a second displayed dictionary.
 
-The prompt points out the core failure mode of eigendecomposition: orthogonality forces overlapping visual structures into awkward basis vectors. I treated the task as a search over priors rather than as a search for one perfect tensor factorization.
+My favorite final result is the **two-bank displayed dictionary**: it reaches `0.8889` tensor cosine and `96.7%` accuracy with one-hot heads and no free residual branch. The highest-fidelity one-hot result reaches `0.9553` tensor cosine and `97.2%` accuracy, but about `70%` of that fit is residual-owned, so I treat it as a useful control rather than the best explanation.
 
-I separated the objective into three pieces:
+## How I Thought About It
 
-| Objective | What I measured | Why it matters |
-|---|---|---|
-| Faithfulness | tensor cosine and decomposed test accuracy | the decomposition should still represent the trained model |
-| Readability | locality, gini/sparsity, smoothness, screenshots | the factors should look like human concepts |
-| Head clarity | class selectivity and top-1 head mass | each component should have a simple class-level meaning |
+The prompt points out that eigendecomposition has a built-in problem: orthogonal directions are not necessarily the visual concepts we care about. A digit can share overlapping strokes with other digits, and forcing those strokes into orthogonal eigenvectors tends to make them look messy.
 
-The main hypothesis was: MNIST evidence is local and stroke-like, while the exact trained tensor still contains residual structure that may not be human-readable. So the best report should show an interpretable dictionary honestly and measure how much residual structure it needed.
+So I kept three questions separate:
 
-## Best Result
+1. Does the decomposition still behave like the original model?
+2. Do the components look like strokes, hooks, loops, gaps, or counter-evidence?
+3. Can I say what class each component is evidence for without reading a dense head vector?
 
-The best balanced method was `combo_cp_top1_res8`:
+That last point mattered more than I expected. A component with a beautiful-looking stroke but a dense class head is still hard to explain. A lot of the later experiments therefore forced **one-class heads** and then asked how much fidelity I could recover.
 
-- CP-style tensor factors
-- stroke-template initialization: bars, diagonals, arcs, loops, endpoints
-- learnable Gaussian locality masks
-- hard top-1 class heads for displayed components
-- logit distillation against the original model
-- small residual CP branch to absorb leftover tensor mass
+## Main Balanced Result
+
+The first result I would show is `combo_cp_top1_res8`. This combines stroke-template initialization, learnable locality masks, one-hot class heads, logit distillation, and a small residual branch.
 
 ![Best balanced decomposition](figures/stroke_mask_residual/best_stroke_mask_residual_denoised.png)
+
+It gets:
 
 | Metric | Value |
 |---|---:|
@@ -38,59 +38,63 @@ The best balanced method was `combo_cp_top1_res8`:
 | decomposed test accuracy | `96.8%` |
 | class selectivity | `1.0000` |
 | top-1 head mass | `1.0000` |
-| 7x7 locality | `0.3240` |
-| pattern gini | `0.5005` |
 
-This is the result I would submit as the main decomposition. It is much clearer than the plain sparse baseline while keeping high classification accuracy. The residual branch is important: it lets the visible dictionary stay human-readable instead of forcing every bit of tensor mass into the displayed concepts.
+This was the first point where the result felt like a real answer to the prompt. The components are much more readable than the baseline, and the heads are simple. The residual branch is doing useful work, though, so I did not want to stop here.
 
-## Residual Capacity Frontier
+## What Happened When I Chased Fidelity
 
-After the `combo_cp_top1_res16` run improved tensor cosine from `0.8757` to `0.9053`, I ran a more systematic residual-capacity sweep. The reason was simple: if a residual branch improves faithfulness while preserving one-hot displayed heads, then the important question is not "does residual help?" but "how much of the explanation has moved into the residual?"
-
-I swept CP/split variants with residual ranks 16, 24, 32, and 48, plus different residual penalties. I also included one top-2-head control to check whether relaxing head sparsity was worth it.
+Once the balanced run worked, I wanted to know whether one-hot heads were fundamentally incompatible with high fidelity. They were not. Increasing residual capacity pushed tensor cosine much higher while keeping the displayed heads one-hot.
 
 ![Residual capacity frontier](figures/residual_capacity_frontier/residual_capacity_frontier.png)
 
-The best one-hot fidelity result was `cp_res48_pen004`:
+The best high-fidelity one-hot run was `cp_res48_pen004`:
 
 ![Best residual-capacity result](figures/residual_capacity_frontier/best_onehot_fidelity_cp_res48_pen004_denoised.png)
 
 | Metric | Value |
 |---|---:|
 | total tensor cosine | `0.9553` |
-| displayed dictionary cosine | `0.2865` |
 | decomposed test accuracy | `97.2%` |
 | class selectivity | `1.0000` |
 | top-1 head mass | `1.0000` |
-| 7x7 locality | `0.3382` |
-| pattern gini | `0.5531` |
+| displayed dictionary cosine | `0.2865` |
 | residual fraction | `0.7001` |
 
-This beats the previous high-fidelity one-hot result by a lot on tensor cosine (`0.9553` vs `0.9053`) and matches the original model's accuracy closely. I would not replace the main decomposition with it, because the displayed dictionary explains much less of the tensor by itself. The value of this run is that it maps the tradeoff: residual rank 16 is more dictionary-owned; residual rank 48 is much more faithful but mostly residual-owned.
+This was both encouraging and suspicious. It proved that one-hot heads can coexist with high fidelity, but most of the explanation had moved into the residual branch. That made the next question obvious: can I recover some of this fidelity without hiding it in a free residual?
 
-## Interpretable Residual Follow-Ups
+## The Best Follow-Up: Two Displayed Banks
 
-The residual frontier made the next question obvious: can we recover some of that residual-owned fidelity without hiding the explanation in a free residual branch? I tried five follow-ups, one at a time, with the same base model and target tensor.
+I then tried five follow-ups aimed at the residual problem:
 
-![Next-step frontier](figures/interpretable_next_steps/interpretable_next_steps_frontier.png)
+| Experiment | Why I Tried It | What Happened |
+|---|---|---|
+| Boosted residual decomposition | Fit a second interpretable dictionary to the first dictionary's leftover tensor. | Did not work well: `0.8466` cosine. The leftover structure was not easily captured after the first dictionary took the obvious strokes. |
+| Residual annealing | Start with a strong residual, then penalize it harder over training. | Stayed high-fidelity (`0.9495`) but remained `72%` residual-owned. |
+| Two-bank dictionary | Replace the hidden residual with a second displayed stroke dictionary. | Best interpretable improvement: `0.8889` cosine, `96.7%` accuracy, no free residual. |
+| Activation consistency | Make components fire on more coherent groups of examples. | Cleaner/selective, but too much fidelity loss: `0.8647` cosine. |
+| Data-derived priors | Build anchors from MNIST means/differences/PCA instead of hand stroke templates. | Competitive (`0.8833`) but not better than hand stroke priors. |
 
-The most important new result was the two-bank interpretable dictionary. Instead of a free residual branch, it uses two displayed stroke-mask dictionaries: a primary bank and a secondary correction bank. Both keep one-hot class heads.
+The two-bank result is the one that changed my mind about the direction. I initially thought the right move was "make the residual smaller." The better move was "make the residual visible."
 
 ![Two-bank interpretable dictionary](figures/interpretable_next_steps/two_bank_interpretable_denoised.png)
 
-| Experiment | Why I tried it | Result |
-|---|---|---|
-| Boosted residual decomposition | fit a second interpretable dictionary to the first dictionary's residual | `0.8466` cosine, `96.8%` acc; did not beat the main result |
-| Residual annealing | start residual-heavy, then penalize residual harder | `0.9495` cosine, `96.8%` acc; high fidelity but still `72%` residual-owned |
-| Two-bank dictionary | replace free residual with a second displayed dictionary | `0.8889` cosine, `96.7%` acc, `0%` residual-owned; best no-free-residual result |
-| Activation consistency | encourage components to fire on coherent label groups | `0.8647` cosine; cleaner locality/gini but worse fidelity |
-| Data-derived priors | initialize anchors from MNIST means/differences/PCA instead of hand templates | `0.8833` cosine; competitive but not better than hand stroke priors |
+The two-bank dictionary gets:
 
-The two-bank result is the strongest genuinely interpretable improvement after the original balanced run. It beats `combo_cp_top1_res8` on dictionary-owned tensor cosine (`0.8889` vs `0.8757`) while keeping one-hot heads and avoiding a free residual. It is not as clean visually as the best visual-prior result, but it is a better answer to the residual-dependence caveat.
+| Metric | Value |
+|---|---:|
+| tensor cosine | `0.8889` |
+| decomposed test accuracy | `96.7%` |
+| class selectivity | `1.0000` |
+| top-1 head mass | `1.0000` |
+| free residual fraction | `0.0000` |
+
+This is now my strongest "honest interpretability" result. It does not beat the residual-heavy run on raw fidelity, but it explains more using displayed components. That feels closer to the spirit of the task.
+
+![Next-step frontier](figures/interpretable_next_steps/interpretable_next_steps_frontier.png)
 
 ## Cleanest Visual Result
 
-The most visually interpretable result was `mask034_cp_top1_distill`, which used fixed localized masks, smoothness, hard top-1 heads, and logit distillation.
+The prettiest screenshot came from a more aggressive visual-prior run, `mask034_cp_top1_distill`. It used fixed localized masks, smoothing, one-class heads, and logit distillation.
 
 ![Cleanest visual decomposition](figures/visual_priors_extreme/best_visual_denoised.png)
 
@@ -101,78 +105,52 @@ The most visually interpretable result was `mask034_cp_top1_distill`, which used
 | class selectivity | `1.0000` |
 | top-1 head mass | `1.0000` |
 | 7x7 locality | `0.5084` |
-| pattern gini | `0.6970` |
 
-This is the best screenshot-level result. It has a lower tensor cosine, but the components are more local and the heads are perfectly sparse. I would use it as evidence that the visual-prior direction works, not as the final faithful decomposition.
+I would not call this the best decomposition because the tensor cosine is much lower, but it was useful. It showed that the visual priors were pointing in the right direction: locality and sparse heads really do make the components easier to read.
 
-## Activation Check
+## Activation And Stability Checks
 
-I also generated an activation gallery for the final stroke-mask-residual model. Each row shows a component's positive/negative visual pattern and the MNIST examples that most activate it.
+I did not want to rely only on nice-looking weight plots, so I added two checks.
+
+First, I plotted examples that most activate some of the learned components:
 
 ![Activation gallery](figures/best_combo_validation/best_combo_activation_gallery.png)
 
-This is a useful sanity check because it asks whether components fire on coherent examples, not only whether their weights look nice. Many top activations are class-consistent: loop-like components fire on zeros/nines, slanted-stroke components fire on sevens/twos, and vertical/hook-like components fire on fives/twos depending on sign.
+This mostly passed the smell test. Loop-like components fire on zeros/nines, slanted components fire on sevens/twos, and some hook-like components fire on fives/twos depending on sign.
 
-## Final Stability Check
-
-The last thing I tried was a seed-consensus panel. For each digit and each seed, I selected the strongest displayed component assigned to that digit and plotted its positive/negative factors.
+Second, I checked seed stability:
 
 ![Seed consensus panel](figures/best_combo_validation/best_combo_class_consensus.png)
 
-This did not produce a better headline visual, but it made the remaining limitation clearer. The method reliably finds one-class, local, high-accuracy decompositions across seeds, but the exact component basis is still not canonical. That is why I report this as a strong decomposition family rather than claiming that one run has discovered the unique human concept basis.
-
-I also built a five-seed consensus dictionary by clustering recurring components. The top 12 consensus clusters had average support of `3.33/5` seeds and average within-cluster similarity of `0.488`.
+The high-level metrics were stable, but exact component identity was not. In a three-seed validation run, top-component matching against seed 1 averaged `0.428`. I also tried a five-seed consensus dictionary:
 
 ![Consensus dictionary](figures/consensus_dictionary/consensus_dictionary.png)
 
-This is a better stability diagnostic than a better visual explanation. It suggests the next real improvement would be a training objective that directly encourages cross-seed alignment, not just a post-hoc clustering pass.
+The top 12 clusters had average support of `3.33/5` seeds and average within-cluster similarity of `0.488`. That is enough to show recurring families, but not enough to claim a canonical basis. If I kept going, I would make cross-seed alignment part of the training objective rather than doing it afterward.
 
 ## Comparison To The Prompt Example
 
-The prompt screenshot shows plausible edge detectors after about one hour, but the heads are still somewhat mixed and the visual factors are noisy.
+The prompt example shows plausible edge detectors, but the heads are still visually mixed. Compared with that example, the strongest parts of this submission are:
 
-Compared with that example, this submission is stronger in three concrete ways:
+- The displayed heads are exactly one-hot in the main runs: `class_selectivity = 1.0`, `top-1 head mass = 1.0`.
+- The clean visual run is much more local.
+- The high-fidelity one-hot run gets to `0.9553` tensor cosine.
+- The two-bank run gives a better honest explanation than a hidden residual branch.
 
-- The best visual and balanced runs have exactly one-hot displayed heads: `class_selectivity = 1.0`, `top-1 head mass = 1.0`.
-- The visual-prior run is substantially more localized: `7x7 locality = 0.5084`.
-- The balanced run keeps the model useful: `96.8%` decomposed accuracy with `0.8757` total tensor cosine.
+The caveat is also clear: the exact component basis is still not seed-stable enough. I think that is the most interesting remaining research problem here.
 
-The honest limitation is that component identity is not fully seed-stable. In a three-seed validation run of the final method, all seeds kept the same high-level metrics, but top-component matching against seed 1 averaged `0.428`. That means the family of solutions is stable, but individual components still need a consensus or alignment step before I would claim exact reproducibility.
+## Summary
 
-## What I Tried
+| Result | Tensor Cosine | Accuracy | Why I Care |
+|---|---:|---:|---|
+| Provided sparse baseline | `0.8589` | `94.9%` | starting point |
+| Evidence split sparse/smooth | `0.8770` | `95.5%` | better early low-rank fit |
+| Clean visual-prior run | `0.6546` | `95.2%` | clearest screenshot |
+| Main balanced result | `0.8757` | `96.8%` | readable with a small residual |
+| Two-bank displayed dictionary | `0.8889` | `96.7%` | best no-free-residual explanation |
+| High-fidelity one-hot residual run | `0.9553` | `97.2%` | best fidelity, but residual-heavy |
 
-| Approach | Why I tried it | Result |
-|---|---|---|
-| Provided sparse CP baseline | reproduce the skeleton and establish a fair baseline | `0.8589` tensor cosine, `94.9%` accuracy; useful but mixed/noisy |
-| Evidence split factors | separate positive and negative visual evidence | improved to `0.8770` cosine and `95.5%` accuracy, still visually crowded |
-| Strict symmetric factors | match the bilinear tensor's symmetry directly | conceptually clean but underfit |
-| Nonnegative factors | force additive stroke parts | mostly failed; too restrictive for signed evidence |
-| Eigen-seeded dictionaries | reuse the old decomposition as initialization | did not fix the superposition problem |
-| Rank-64 CP search | test whether fidelity was the bottleneck | reached `0.9497` cosine and `97.1%` accuracy, but heads were diffuse |
-| Localized visual priors | force local, sparse, smooth components | produced the cleanest human-readable result |
-| Stroke-template dictionary | initialize with human stroke families | made components more nameable |
-| Stroke templates + masks + residual | combine readability with a fidelity escape hatch | best balanced result |
-| Residual capacity frontier | test whether one-hot heads can survive much higher fidelity | reached `0.9553` tensor cosine, but with `70%` residual dependence |
-| Interpretable residual follow-ups | try to replace hidden residual capacity with displayed structure | two-bank dictionary reached `0.8889` cosine with no free residual |
-
-## Summary Table
-
-| Method | Tensor cosine | Accuracy | Head clarity | Role |
-|---|---:|---:|---:|---|
-| Provided sparse baseline | `0.8589` | `94.9%` | mixed | baseline |
-| Evidence split sparse/smooth | `0.8770` | `95.5%` | mixed | better low-rank fit |
-| CP soft symmetry rank-64 | `0.9497` | `97.1%` | poor | highest-fidelity control |
-| Localized top-1 masks | `0.6546` | `95.2%` | excellent | cleanest visual explanation |
-| Stroke-template dictionary | `0.8424` | `96.3%` | excellent | human prior works |
-| Stroke templates + masks + residual | `0.8757` | `96.8%` | excellent | best balanced submission |
-| Two-bank displayed dictionary | `0.8889` | `96.7%` | excellent | best no-free-residual result |
-| Top-1 heads + larger residual | `0.9553` | `97.2%` | excellent | highest-fidelity one-hot variant |
-
-## Conclusions
-
-The main result is a Pareto frontier. Tensor cosine alone finds faithful but ugly decompositions. Strong visual priors find clean concepts but sacrifice reconstruction. The most promising direction is to separate the model into an interpretable displayed dictionary plus a measured residual branch.
-
-Objectively, I think this is stronger than a typical quick applicant solution because it does not stop at sparse CP: it tests multiple priors, reports negative results, adds visual metrics, checks activations, and includes a stability stress test. The main gap versus a polished research result is seed-level concept stability. The next experiment I would run is consensus factor matching across more seeds, then report only recurring components.
+My final interpretation is that interpretability here is a frontier. If I only optimize reconstruction, the components become less meaningful. If I force the components to be clean, I lose fidelity. The most promising middle ground is to make more of the correction structure visible: two displayed dictionaries worked better than hiding everything in a residual.
 
 ## Reproducing
 
@@ -183,7 +161,7 @@ python3.11 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-Execute the final notebook:
+The main notebook can be executed with:
 
 ```bash
 PYTORCH_ENABLE_MPS_FALLBACK=1 RUN_PROFILE=balanced \
@@ -191,29 +169,20 @@ PYTORCH_ENABLE_MPS_FALLBACK=1 RUN_PROFILE=balanced \
   --output 0_decomposition.executed.ipynb --ExecutePreprocessor.timeout=3600
 ```
 
-Run the strongest searches:
+The most important scripts are:
 
 ```bash
-PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_visual_priors.py \
-  --epochs 10 --steps 260 --rank 64 --outdir figures/visual_priors_extreme
-
 PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_stroke_mask_residual.py \
   --epochs 10 --steps 320 --rank 64
-
-PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/validate_best_combo.py \
-  --epochs 8 --steps 240 --rank 64 --seeds 1 2 3
-
-PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/build_consensus_dictionary.py \
-  --epochs 8 --steps 220 --rank 64 --seeds 1 2 3 4 5 --min-cos 0.32
-
-PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/render_selected_stroke_variant.py \
-  --variant combo_cp_top1_res16 --epochs 10 --steps 340 --rank 64
 
 PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_residual_capacity_frontier.py \
   --epochs 10 --steps 300 --rank 64
 
 PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/search_interpretable_next_steps.py \
   --epochs 8 --steps 220
+
+PYTORCH_ENABLE_MPS_FALLBACK=1 .venv/bin/python scripts/validate_best_combo.py \
+  --epochs 8 --steps 240 --rank 64 --seeds 1 2 3
 ```
 
-The detailed metric tables are in `figures/**.csv`, and the implementation is in `scripts/` plus the executed `0_decomposition.ipynb`.
+The metric tables and figures are under `figures/`.
