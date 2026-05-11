@@ -4,6 +4,45 @@ This is my extended solution for the MARS V applicant task on decomposing MNIST 
 
 The short version: plain tensor reconstruction gives high fidelity but noisy components. Adding human-facing priors creates a clear Pareto frontier. The best visual result has very clean, one-class heads and localized components; the best balanced result uses a stroke-template dictionary and keeps one-hot heads while recovering substantially more tensor fidelity.
 
+## How I Thought About The Task
+
+The assignment prompt says there is no single right decomposition; the important
+part is finding priors or structure that make the decomposition more
+interpretable than per-class eigendecomposition. I used that as the organizing
+principle.
+
+My working hypothesis was:
+
+> A good decomposition should not only reconstruct the interaction tensor. It
+> should expose reusable pieces of digit evidence: bars, hooks, loops, gaps, and
+> counter-strokes that affect a small number of classes.
+
+That led me to separate three objectives that are often conflated:
+
+1. **Faithfulness:** does the decomposed model preserve the original tensor and
+   predictions?
+2. **Compression:** can a small number of shared components explain multiple
+   digits?
+3. **Human readability:** do the components look like concepts rather than
+   arbitrary low-rank factors?
+
+Early runs showed that optimizing tensor cosine alone mostly solves
+faithfulness, but not readability. The rest of the work is an attempt to add
+increasingly explicit human priors while measuring the cost in fidelity.
+
+The strongest priors were:
+
+- hard class-head sparsity, because a component with a dense head is hard to
+  name
+- locality masks, because MNIST evidence is usually a local stroke or gap
+- logit distillation, because tensor cosine can reward irrelevant tensor mass
+- stroke-template initialization, because smoothness alone does not create
+  human concepts
+
+The main lesson is that interpretability here is a Pareto problem, not a single
+metric. The best-looking explanation and the most faithful explanation are not
+the same object.
+
 ## Files To Read
 
 - `0_decomposition.ipynb` - executed notebook with the main decomposition experiments
@@ -15,6 +54,25 @@ The short version: plain tensor reconstruction gives high fidelity but noisy com
 - `figures/` - exported figures and CSV metric tables
 
 I also added a minimal local `image/` package because the helper source imported by the notebooks was not present in the provided directory.
+
+## Assignment Checklist
+
+The original prompt asks for a concise report with screenshots of experiments
+and thoughts/conclusions. This repo covers that as follows:
+
+- **Read/setup tutorials:** `0_introduction.ipynb` and `1_image.ipynb` were used
+  to ground the interaction-tensor and eigendecomposition framing.
+- **Implement tensor decompositions:** `0_decomposition.ipynb` and the scripts
+  implement CP, symmetric, evidence-split, visual-prior, and stroke-template
+  decompositions.
+- **Try priors/structure:** sparsity, smoothness, hard class heads, localized
+  masks, distillation, eigen seeding, nonnegative factors, and stroke templates.
+- **Screenshots/visuals:** key exported figures are embedded below, with more in
+  `figures/`.
+- **Thoughts/conclusions:** this README and `search_results_and_next_plan.md`
+  summarize what worked, what failed, and why.
+- **Code links:** scripts are included, but the README is written so the main
+  conclusions are visible without reading all code.
 
 ## Main Question
 

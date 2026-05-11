@@ -1,6 +1,6 @@
 # Search Results And Next Plan
 
-## Comparison To Prompt Example
+## Comparison To Example in the Doc
 
 The prompt example is qualitatively better than our current best visual outputs.
 It shows several columns that are immediately readable as strokes or edge
